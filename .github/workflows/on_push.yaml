@@ -1,0 +1,22 @@
+name: on_push
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: set up uv
+        uses: astral-sh/setup-uv@v5
+        with: 
+          enable-cache: true
+      
+      - name: Install dependencies and test
+        run: |
+          uv python install 3.12
+          uv sync
+          uv run ruff check .
+          uv run mypy .
+  
