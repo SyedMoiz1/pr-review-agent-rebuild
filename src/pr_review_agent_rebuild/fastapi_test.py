@@ -5,6 +5,7 @@ app = FastAPI()
 
 #define route using a decorator
 @app.get("/")
-def response():
+def response() -> dict[str, bool]:
     return {"ok": True}
+
 
