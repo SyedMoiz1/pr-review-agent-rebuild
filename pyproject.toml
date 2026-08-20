@@ -1,0 +1,19 @@
+[project]
+name = "pr-review-agent-rebuild"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Syed Moiz", email = "syedmoiz619@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "ruff>=0.16.3",
+]
+
+[project.scripts]
+pr-review-agent-rebuild = "pr_review_agent_rebuild:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
