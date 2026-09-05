@@ -19,4 +19,4 @@ jobs:
           uv sync
           uv run ruff check .
           uv run mypy .
-  
+      
