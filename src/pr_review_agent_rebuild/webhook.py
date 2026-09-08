@@ -21,12 +21,12 @@ app = FastAPI()
 
 #setup Basemodel for webhook payloads
 
-class WebhookPayload(BaseModel):
-    action: str
-    number: int
-    pull_request: dict
-    repository: dict
-    sender: dict
+# class WebhookPayload(BaseModel): TODO: To use this define pull_request, repository and sender as their own pydantic models
+#     action: str
+#     number: int
+#     pull_request: dict
+#     repository: dict
+#     sender: dict
 
 def validate_hmac(hmac_str: str, payload: str, secret: str) -> bool:
     actual = 'sha256=' + hmac.new(secret.encode(), payload.encode(), digestmod=hashlib.sha256).hexdigest()
