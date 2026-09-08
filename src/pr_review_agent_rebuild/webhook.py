@@ -10,8 +10,8 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 
+#from pydantic import BaseModel
 #import json
 
 load_dotenv()
