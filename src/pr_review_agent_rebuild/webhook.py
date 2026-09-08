@@ -3,14 +3,16 @@
 # Recomputes the HMAC using your secret key and the raw request body
 # Uses hmac.compare_digest to compare (timing-safe)
 # Returns 200 if valid, 401 if not
-
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from dotenv import load_dotenv
 import hashlib
 import hmac
 import os
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+
 #import json
 
 
