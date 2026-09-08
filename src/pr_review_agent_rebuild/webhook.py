@@ -5,15 +5,15 @@
 # Uses hmac.compare_digest to compare (timing-safe)
 # Returns 200 if valid, 401 if not
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import gzip
+from dotenv import load_dotenv
 import json
 import os
 import hmac
 import hashlib
-from dotenv import load_dotenv
+
 
 load_dotenv()
 secret = os.environ["WEBHOOK_SECRET"]
@@ -44,8 +44,8 @@ async def create_item(request: Request) -> JSONResponse:
     try:
         signature = request.headers['x-hub-signature-256']
     except KeyError as e: #TODO: add custom exception hierarchies
-        raise KeyError("No HMAC found")
-    payload_data = WebhookPayload(**data)
+        raise KeyError("No HMAC found") from e
+    #payload_data = WebhookPayload(**data)
     response = validate_hmac(signature, payload, secret=secret)
     
     if response:
