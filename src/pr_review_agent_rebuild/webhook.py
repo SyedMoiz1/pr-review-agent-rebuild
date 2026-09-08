@@ -12,10 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-
 #import json
-
-
 
 load_dotenv()
 secret = os.environ["WEBHOOK_SECRET"]
@@ -23,7 +20,6 @@ secret = os.environ["WEBHOOK_SECRET"]
 app = FastAPI()
 
 #setup Basemodel for webhook payloads
-
 
 class WebhookPayload(BaseModel):
     action: str
@@ -35,7 +31,6 @@ class WebhookPayload(BaseModel):
 def validate_hmac(hmac_str: str, payload: str, secret: str) -> bool:
     actual = 'sha256=' + hmac.new(secret.encode(), payload.encode(), digestmod=hashlib.sha256).hexdigest()
     return hmac.compare_digest(actual, hmac_str)
-
 
 @app.post("/items/")
 async def create_item(request: Request) -> JSONResponse:
