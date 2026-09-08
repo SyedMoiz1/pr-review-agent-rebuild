@@ -1,5 +1,4 @@
 # Webhook endpoint with HMAC verification — the main thing left. A FastAPI route (POST /webhook) that:
-
 # Reads the X-Hub-Signature-256 header GitHub sends
 # Recomputes the HMAC using your secret key and the raw request body
 # Uses hmac.compare_digest to compare (timing-safe)
@@ -9,10 +8,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-import json
-import os
-import hmac
 import hashlib
+import hmac
+import os
+#import json
+
 
 
 load_dotenv()
@@ -39,7 +39,7 @@ def validate_hmac(hmac_str: str, payload: str, secret: str) -> bool:
 async def create_item(request: Request) -> JSONResponse:
     raw_body = await request.body()
 
-    data = json.loads(raw_body)
+    #data = json.loads(raw_body)
     payload = raw_body.decode("utf-8")
     try:
         signature = request.headers['x-hub-signature-256']
