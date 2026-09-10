@@ -42,19 +42,18 @@ class WebhookPayload(BaseModel):
     repository: Repository
     sender: Sender
 
-def validate_hmac(hmac_str: str, payload: str, secret: str) -> bool:
-    actual = 'sha256=' + hmac.new(secret.encode(), payload.encode(), digestmod=hashlib.sha256).hexdigest()
+def validate_hmac(hmac_str: str, payload: bytes, secret: str) -> bool:
+    actual = 'sha256=' + hmac.new(secret.encode(), payload, digestmod=hashlib.sha256).hexdigest()
     return hmac.compare_digest(actual, hmac_str)
 
 @app.post("/webhook")
 async def create_item(request: Request) -> JSONResponse:
     raw_body = await request.body()
-    body = raw_body.decode("utf-8")
-    try:
-        signature = request.headers['x-hub-signature-256']
-    except KeyError as e: #TODO: add custom exception hierarchies
-        raise KeyError("No HMAC found") from e
-    response = validate_hmac(signature, body, secret=secret)
+    
+    signature = request.headers.get('x-hub-signature-256')
+    if not signature:
+        return JSONResponse(status_code=401, content={"message": "Missing signature."})
+    response = validate_hmac(signature, raw_body, secret=secret)
     
     if response:
         data = json.loads(raw_body)
@@ -66,7 +65,6 @@ async def create_item(request: Request) -> JSONResponse:
                 content={"message": "Pull Request received and validated successfully."}
             )
         except (ValidationError) as e:
-            #print(e)
             return JSONResponse(
                 status_code=422,
                 content={"message": f"Invalid Data Fields. {e}"}
