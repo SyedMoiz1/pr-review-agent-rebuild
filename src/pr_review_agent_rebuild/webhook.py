@@ -5,13 +5,12 @@
 # Returns 200 if valid, 401 if not
 import hashlib
 import hmac
+import json
 import os
-
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
-import json
 
 load_dotenv()
 secret = os.environ["WEBHOOK_SECRET"]
