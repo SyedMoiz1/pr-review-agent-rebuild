@@ -5,21 +5,22 @@
 # Returns 200 if valid, 401 if not
 import hashlib
 import hmac
-import logging
-import time
 import json
+import logging
 import os
+import time
 import uuid
-
 from contextvars import ContextVar
+from json.decoder import JSONDecodeError
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
-from .exceptions import AppError, InvalidSignature, MalformedPayload, StorageError
-from json.decoder import JSONDecodeError
 from pydantic import BaseModel, ValidationError
 from pydantic_core import ErrorDetails
 from starlette.middleware.base import RequestResponseEndpoint
+
+from .exceptions import AppError, InvalidSignature, MalformedPayload
 
 load_dotenv()
 secret = os.environ["WEBHOOK_SECRET"]
@@ -108,7 +109,7 @@ async def create_item(request: Request) -> JSONResponse:
     raw_body = await request.body()
     signature = request.headers.get('x-hub-signature-256')
     if not signature:
-        logger.warning(json.dumps({"request_id": f"{request_id_var.get()}", "path": f"{request.url.path}", "message": f"Request failed due to a missing HMAC."})) 
+        logger.warning(json.dumps({"request_id": f"{request_id_var.get()}", "path": f"{request.url.path}", "message": "Request failed due to a missing HMAC."})) 
         raise InvalidSignature(reason = "Authentication Error")
     valid_hmac = validate_hmac(signature, raw_body, secret=secret)
     
@@ -127,6 +128,6 @@ async def create_item(request: Request) -> JSONResponse:
         except JSONDecodeError as e:
             raise MalformedPayload(reason = "Invalid Data Fields. Please ensure payload is sent in JSON format.") from e
     else:
-        logger.warning(json.dumps({"request_id": f"{request_id_var.get()}", "message": f"Request failed due to an Invalid Signature"})) 
+        logger.warning(json.dumps({"request_id": f"{request_id_var.get()}", "message": "Request failed due to an Invalid Signature"})) 
         raise InvalidSignature(reason = "Authentication Error")
     
