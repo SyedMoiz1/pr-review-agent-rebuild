@@ -4,3 +4,4 @@ venv/
 .venv/
 .env
 Drills/
+*_cache

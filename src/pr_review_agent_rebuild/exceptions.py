@@ -22,6 +22,9 @@ class AppError(Exception): #Base for everything in app
 class InvalidSignature(AppError):
     status = 401
 
+class UnknownSender(AppError):
+    status = 400
+    
 class MalformedPayload(AppError):
     status = 422
 
