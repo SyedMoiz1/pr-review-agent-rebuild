@@ -3,7 +3,6 @@
 # Recomputes the HMAC using your secret key and the raw request body
 # Uses hmac.compare_digest to compare (timing-safe)
 # Returns 200 if valid, 401 if not
-import asyncpg
 import hashlib
 import hmac
 import json
@@ -12,18 +11,25 @@ import os
 import time
 import uuid
 from collections.abc import AsyncIterator
-from contextvars import ContextVar
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from json.decoder import JSONDecodeError
 
+import asyncpg
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Response, Depends
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 from pydantic_core import ErrorDetails
 from starlette.middleware.base import RequestResponseEndpoint
 
-from .exceptions import AppError, InvalidSignature, MalformedPayload, UnknownSender, StorageError
+from .exceptions import (
+    AppError,
+    InvalidSignature,
+    MalformedPayload,
+    StorageError,
+    UnknownSender,
+)
 
 load_dotenv()
 secret = os.environ["WEBHOOK_SECRET"]
@@ -123,7 +129,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=status, content={"request_id": request_id_var.get(), "error": str(exc)})
 
 @app.post("/webhook")
-async def create_item(request: Request, pool:asyncpg.Pool=Depends(get_pool)) -> JSONResponse:
+async def create_item(request: Request, pool:asyncpg.Pool=Depends(get_pool)) -> JSONResponse: # noqa: B008
 
     raw_body = await request.body()
     signature = request.headers.get('x-hub-signature-256')
