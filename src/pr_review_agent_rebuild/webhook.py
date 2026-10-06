@@ -23,13 +23,7 @@ from pydantic import BaseModel, ValidationError
 from pydantic_core import ErrorDetails
 from starlette.middleware.base import RequestResponseEndpoint
 
-from .exceptions import (
-    AppError,
-    InvalidSignature,
-    MalformedPayload,
-    StorageError,
-    UnknownSender,
-)
+from .exceptions import AppError, InvalidSignature, MalformedPayload, StorageError
 
 load_dotenv()
 secret = os.environ["WEBHOOK_SECRET"]
@@ -95,6 +89,7 @@ def get_pool(request: Request) -> asyncpg.Pool:
     pool: asyncpg.Pool = request.app.state.pool #using request.app rather just app which allows dependency overrides
     return pool
 
+
 @app.middleware("http")
 async def add_request_id(request: Request, call_next: RequestResponseEndpoint) -> Response | None:
     headers = request.headers
@@ -105,8 +100,8 @@ async def add_request_id(request: Request, call_next: RequestResponseEndpoint) -
     request_id_var.set(request_uuid)
     response = None
 
+    before_time = time.perf_counter()
     try:
-        before_time = time.perf_counter()
         response = await call_next(request)
         response.headers['X-Request-ID'] = request_uuid
     finally:
@@ -141,50 +136,64 @@ async def create_item(request: Request, pool:asyncpg.Pool=Depends(get_pool)) -> 
         raise InvalidSignature(reason = "Authentication Error")
     valid_hmac = validate_hmac(signature, raw_body, secret=secret)
     
-    if valid_hmac:
-        if not delivery_id:
-            logger.warning(json.dumps({"request_id": f"{request_id}", "path": f"{request.url.path}", "message": "Request failed due to a missing Github Delivery ID."})) 
-            raise UnknownSender(reason= "Bad Request")
-        try:
-            data = json.loads(raw_body)
-            payload = WebhookPayload(**data)
-            logger.info(json.dumps({"request_id": f"{request_id_var.get()}", "message": f"Webhook number {payload.number} for Pull Request {payload.pull_request.id} successfully verified"})) 
-            try:
-                psql_response = await pool.execute(
-                    """INSERT INTO webhook_events 
-                    (delivery_id, event_type, action, repo, pr_number, payload) 
-                    VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-                    ON CONFLICT (delivery_id) DO NOTHING""",
-                    delivery_id,
-                    event_type,
-                    payload.action,
-                    payload.repository.full_name,
-                    payload.pull_request.number,
-                    json.dumps(data)
-                )
-                if psql_response == "INSERT 0 1":
-                    logger.info(json.dumps({"request_id": f"{request_id_var.get()}", "message": f"Row successfully inserted for delivery id {delivery_id}"})) 
-                elif psql_response == "INSERT 0 0":
-                    logger.info(json.dumps({"request_id": f"{request_id_var.get()}", "message": f"Row not inserted for webhook number {payload.number} due do a duplicate delivery."})) 
-            except TimeoutError as e:
-                logger.error(json.dumps({"request_id": f"{request_id_var.get()}", "message": "Database insert timed out"})) 
-                raise StorageError(reason= "Database insert timed out") from e
-            except OSError as e:
-                logger.error(json.dumps({"request_id": f"{request_id_var.get()}", "message": "Could not reach database"})) 
-                raise StorageError(reason= "Could not reach database") from e
-            except asyncpg.PostgresError as e:
-                logger.error(json.dumps({"request_id": f"{request_id_var.get()}", "message": f"Postgres error: {e}"})) 
-                raise StorageError(reason= "Postgres error") from e
-            return JSONResponse(
-                status_code=200,
-                content={"message": "Pull Request received and validated successfully."}
-            )
-        except ValidationError as e:
-            fields = find_field_errors(e.errors())
-            raise MalformedPayload(reason = f"Invalid Data Fields. Payload has an issue with the following fields: {', '.join(fields)}") from e
-        except JSONDecodeError as e:
-            raise MalformedPayload(reason = "Invalid Data Fields. Please ensure payload is sent in JSON format.") from e
-    else:
-        logger.warning(json.dumps({"request_id": f"{request_id_var.get()}", "message": "Request failed due to an Invalid Signature"})) 
+    if not valid_hmac:#verify signature
+        logger.warning(json.dumps({"request_id": f"{request_id}", "message": "Request failed due to an Invalid Signature"})) 
         raise InvalidSignature(reason = "Authentication Error")
+    if not delivery_id:#check if deliv id exists
+        logger.warning(json.dumps({"request_id": f"{request_id}", "path": f"{request.url.path}", "message": "Request failed due to a missing X-GitHub-Delivery header."})) 
+        raise MalformedPayload(reason = "Missing X-GitHub-Delivery header.")
+    if not event_type:#check if event type exists
+        logger.warning(json.dumps({"request_id": f"{request_id}", "path": f"{request.url.path}", "message": "Request failed due to a missing X-GitHub-Event header."})) 
+        raise MalformedPayload(reason = "Missing X-GitHub-Event header.")
+    elif event_type not in ["pull_request", "ping"]:#ignore unhandled event types
+        logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Unhandled event type received ({event_type})."})) 
+        return JSONResponse(
+            status_code=200, 
+            content={"message": "Event not handled."}
+        )
+    elif event_type == "ping":
+        logger.info(json.dumps({"request_id": f"{request_id}", "message": "Ping received from github."})) 
+        return JSONResponse(
+            status_code=200,
+            content={"message": "Ping acknowledged."}
+        )
     
+    try:
+        data = json.loads(raw_body)
+        payload = WebhookPayload(**data)
+        logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Webhook number {payload.number} for Pull Request {payload.pull_request.id} successfully verified"})) 
+        try:
+            psql_response = await pool.execute(
+                """INSERT INTO webhook_events 
+                (delivery_id, event_type, action, repo, pr_number, payload) 
+                VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+                ON CONFLICT (delivery_id) DO NOTHING""",
+                delivery_id,
+                event_type,
+                payload.action,
+                payload.repository.full_name,
+                payload.pull_request.number,
+                json.dumps(data)
+            )
+            if psql_response == "INSERT 0 1":
+                logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Row successfully inserted for delivery id {delivery_id}"})) 
+            elif psql_response == "INSERT 0 0":
+                logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Row not inserted for webhook number {payload.number} due do a duplicate delivery."})) 
+        except TimeoutError as e:
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Database insert timed out"})) 
+            raise StorageError(reason= "Database insert timed out") from e
+        except OSError as e:
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Could not reach database"})) 
+            raise StorageError(reason= "Could not reach database") from e
+        except asyncpg.PostgresError as e:
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": f"Postgres error: {e}"})) 
+            raise StorageError(reason= "Postgres error") from e
+        return JSONResponse(
+            status_code=200,
+            content={"message": "Pull Request received and validated successfully."}
+        )
+    except ValidationError as e:
+        fields = find_field_errors(e.errors())
+        raise MalformedPayload(reason = f"Invalid Data Fields. Payload has an issue with the following fields: {', '.join(fields)}") from e
+    except JSONDecodeError as e:
+        raise MalformedPayload(reason = "Invalid Data Fields. Please ensure payload is sent in JSON format.") from e
