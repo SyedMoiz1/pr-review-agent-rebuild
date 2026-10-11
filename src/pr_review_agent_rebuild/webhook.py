@@ -3,6 +3,7 @@
 # Recomputes the HMAC using your secret key and the raw request body
 # Uses hmac.compare_digest to compare (timing-safe)
 # Returns 200 if valid, 401 if not
+import base64
 import hashlib
 import hmac
 import json
@@ -13,11 +14,13 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
+from datetime import datetime
 from json.decoder import JSONDecodeError
+from typing import Annotated
 
 import asyncpg
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 from pydantic_core import ErrorDetails
@@ -59,6 +62,17 @@ class WebhookPayload(BaseModel):
     pull_request: PullRequest
     repository: Repository
     sender: Sender
+
+class WebhookEvent(BaseModel):
+    id: int
+    action: str
+    repo: str
+    event_type: str
+    received_at: datetime
+
+class EventResponse(BaseModel):
+    events: list[WebhookEvent]
+    next_cursor: str | None
 
 def validate_hmac(hmac_str: str, payload: bytes, secret: str) -> bool:
     actual = 'sha256=' + hmac.new(secret.encode(), payload, digestmod=hashlib.sha256).hexdigest()
@@ -124,7 +138,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=status, content={"request_id": request_id_var.get(), "error": str(exc)})
 
 @app.post("/webhook")
-async def create_item(request: Request, pool:asyncpg.Pool=Depends(get_pool)) -> JSONResponse: # noqa: B008
+async def create_item(request: Request, pool:asyncpg.Pool=Depends(get_pool) ) -> JSONResponse: # noqa: B008
 
     raw_body = await request.body()
     signature = request.headers.get('x-hub-signature-256')
@@ -197,3 +211,79 @@ async def create_item(request: Request, pool:asyncpg.Pool=Depends(get_pool)) -> 
         raise MalformedPayload(reason = f"Invalid Data Fields. Payload has an issue with the following fields: {', '.join(fields)}") from e
     except JSONDecodeError as e:
         raise MalformedPayload(reason = "Invalid Data Fields. Please ensure payload is sent in JSON format.") from e
+
+@app.get("/events")
+async def list_events(
+    limit: Annotated[int, Query(title="Page Result Limit", ge=1, le=100)] = 10,
+    cursor: str | None = None,
+    repo: str | None = None,
+    event_type: str | None = None,
+    pool:asyncpg.Pool=Depends(get_pool) # noqa: B008
+) -> EventResponse: 
+    try:
+        query = "SELECT id, action, repo, event_type, received_at FROM webhook_events"
+        conditions = []
+        params: list[str | int] = []
+        filters = {}
+
+        if repo:
+            filters["repo"] = repo
+            params.append(repo)
+            conditions.append(f"repo = ${len(params)}")
+        if event_type:
+            filters["event_type"] = event_type
+            params.append(event_type)
+            conditions.append(f"event_type = ${len(params)}")
+        param_filters_hash = normalize_and_hash(filters)
+        if cursor:
+            try:
+                cursor_id, filters_hash = decode_cursor(cursor=cursor)
+            except (IndexError, ValueError, UnicodeDecodeError) as e: #Index error can be caught from cursor not having '|'
+                logger.warning(json.dumps({"message": f"Could not decode cursor id due to {e}."}))
+                raise MalformedPayload(reason = "Invalid Cursor Field.") from e
+            
+            #verify filters hash matches to the actual filters provided
+            if param_filters_hash != filters_hash:
+                logger.warning(json.dumps({"message": "Filter provided does not match the filters provided with the cursor."}))
+                raise MalformedPayload(reason = "Filters changed since this cursor was issued. Restart paging without a cursor.")
+            params.append(cursor_id)
+            conditions.append(f"id < ${len(params)}") #descending id order
+
+        if conditions != []:
+            query += " WHERE " + " AND ".join(conditions)
+        
+        params.append(limit+1)
+        query += f" ORDER BY id DESC LIMIT ${len(params)}"#fetch limit + 1 rows to see if next page is needed
+        psql_response = await pool.fetch(query, *params)
+        typed_events = []
+
+        for row in psql_response:
+            typed_events.append(WebhookEvent(id = row["id"], action=row["action"], repo=row["repo"], event_type=row['event_type'], received_at=row['received_at']))
+        if len(psql_response) <= limit: #less items available than limit
+            cursor = None
+        else: 
+            cursor = encode_cursor(psql_response[-2]["id"], param_filters_hash)
+            typed_events.pop()
+        return EventResponse(events=typed_events, next_cursor = cursor)
+    except TimeoutError as e:
+        logger.error(json.dumps({"message": "Database read timed out"})) 
+        raise StorageError(reason= "Database read timed out") from e
+    except OSError as e:
+        logger.error(json.dumps({"message": "Could not reach database"})) 
+        raise StorageError(reason= "Could not reach database") from e
+    except asyncpg.PostgresError as e:
+        logger.error(json.dumps({"message": f"Postgres error: {e}"})) 
+        raise StorageError(reason= "Postgres error") from e
+    
+def decode_cursor(cursor: str) -> tuple[int, str]:
+    decoded_string = base64.urlsafe_b64decode(cursor.encode()).decode()#str -> bytes -> decoded bytes -> string
+    cursor_id = int(decoded_string.split("|")[0])
+    filters_hash = decoded_string.split("|")[1]
+    return cursor_id, filters_hash
+def encode_cursor(data: int, filters_hash: str) -> str:
+    encoded_str = "|".join([str(data), filters_hash])
+    return base64.urlsafe_b64encode(encoded_str.encode()).decode() #list -> list in bytes ->encoded str in bytes -> str
+def normalize_and_hash(filters: dict[str, str]) -> str:
+    normalized = json.dumps(filters, sort_keys=True)
+    return hashlib.sha256(normalized.encode()).hexdigest()
+
