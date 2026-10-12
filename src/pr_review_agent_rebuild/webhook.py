@@ -18,7 +18,10 @@ from datetime import datetime
 from json.decoder import JSONDecodeError
 from typing import Annotated
 
+import arq
 import asyncpg
+import redis.exceptions
+from arq.connections import RedisSettings
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -26,7 +29,13 @@ from pydantic import BaseModel, ValidationError
 from pydantic_core import ErrorDetails
 from starlette.middleware.base import RequestResponseEndpoint
 
-from .exceptions import AppError, InvalidSignature, MalformedPayload, StorageError
+from .exceptions import (
+    AppError,
+    InvalidSignature,
+    MalformedPayload,
+    QueueError,
+    StorageError,
+)
 
 load_dotenv()
 secret = os.environ["WEBHOOK_SECRET"]
@@ -37,6 +46,11 @@ logger = logging.getLogger(__name__)
 
 #Initiate context vars
 request_id_var: ContextVar[str] = ContextVar('request_id_var')
+
+#REDIS setup
+REDIS_SETTINGS = RedisSettings.from_dsn(os.environ["REDIS_URL"])
+
+
 
 #setup Basemodel for webhook payloads
 #Add more data to models as features are added
@@ -89,18 +103,24 @@ def find_field_errors(errors: list[ErrorDetails]) -> list[str]:
 #Lifespan is when the event loop starts running, since create_pool is async, its created here
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]: 
-    app.state.pool = await asyncpg.create_pool(dsn=os.environ["DATABASE_URL"], command_timeout = 10)
+    app.state.postgres_pool = await asyncpg.create_pool(dsn=os.environ["DATABASE_URL"], command_timeout = 10)
+    app.state.redis_pool = await arq.create_pool(REDIS_SETTINGS)
     try:
         yield
     finally:
-        await app.state.pool.close()
+        await app.state.postgres_pool.close()
+        await app.state.redis_pool.close()
+
 
 
 #create app
 app = FastAPI(lifespan=lifespan)
 
-def get_pool(request: Request) -> asyncpg.Pool: 
-    pool: asyncpg.Pool = request.app.state.pool #using request.app rather just app which allows dependency overrides
+def get_postgres_pool(request: Request) -> asyncpg.Pool: 
+    pool: asyncpg.Pool = request.app.state.postgres_pool #using request.app rather just app which allows dependency overrides
+    return pool
+def get_redis_pool(request: Request) -> arq.ArqRedis: 
+    pool: arq.ArqRedis = request.app.state.redis_pool #using request.app rather just app which allows dependency overrides
     return pool
 
 
@@ -138,8 +158,10 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=status, content={"request_id": request_id_var.get(), "error": str(exc)})
 
 @app.post("/webhook")
-async def create_item(request: Request, pool:asyncpg.Pool=Depends(get_pool) ) -> JSONResponse: # noqa: B008
-
+async def create_item(
+    request: Request,
+    postgres_pool:asyncpg.Pool=Depends(get_postgres_pool), # noqa: B008
+    redis_pool:arq.ArqRedis=Depends(get_redis_pool) ) -> JSONResponse: # noqa: B008
     raw_body = await request.body()
     signature = request.headers.get('x-hub-signature-256')
     delivery_id = request.headers.get('X-GitHub-Delivery')
@@ -176,8 +198,9 @@ async def create_item(request: Request, pool:asyncpg.Pool=Depends(get_pool) ) ->
         data = json.loads(raw_body)
         payload = WebhookPayload(**data)
         logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Webhook number {payload.number} for Pull Request {payload.pull_request.id} successfully verified"})) 
+    #--------------------------POSTGRES INSERT--------------------------
         try:
-            psql_response = await pool.execute(
+            psql_response = await postgres_pool.execute(
                 """INSERT INTO webhook_events 
                 (delivery_id, event_type, action, repo, pr_number, payload) 
                 VALUES ($1, $2, $3, $4, $5, $6::jsonb)
@@ -202,6 +225,22 @@ async def create_item(request: Request, pool:asyncpg.Pool=Depends(get_pool) ) ->
         except asyncpg.PostgresError as e:
             logger.error(json.dumps({"request_id": f"{request_id}", "message": f"Postgres error: {e}"})) 
             raise StorageError(reason= "Postgres error") from e
+    #--------------------Postgres Insert------------------------------------
+
+    #--------------------REDIS ENQUE---------------------------------------
+        try:
+            await redis_pool.enqueue_job('fetch_diff', delivery_id, request_id , _job_id=delivery_id)
+        except (OSError, redis.exceptions.ConnectionError) as e:
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Could not reach redis"})) 
+            raise QueueError(reason= "Could not reach redis") from e
+        except (TimeoutError, redis.exceptions.TimeoutError) as e:
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Redis Enque timed out"})) 
+            raise QueueError(reason= "Redis Enque timed out") from e
+        except redis.exceptions.RedisError as e:
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": f"Redis error: {e}"})) 
+            raise QueueError(reason= "Redis error") from e 
+    #--------------------REDIS ENQUE---------------------------------------
+        
         return JSONResponse(
             status_code=200,
             content={"message": "Pull Request received and validated successfully."}
@@ -218,7 +257,7 @@ async def list_events(
     cursor: str | None = None,
     repo: str | None = None,
     event_type: str | None = None,
-    pool:asyncpg.Pool=Depends(get_pool) # noqa: B008
+    pool:asyncpg.Pool=Depends(get_postgres_pool) # noqa: B008
 ) -> EventResponse: 
     try:
         query = "SELECT id, action, repo, event_type, received_at FROM webhook_events"

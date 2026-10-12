@@ -30,3 +30,6 @@ class MalformedPayload(AppError):
 
 class StorageError(AppError):
     status = 500
+
+class QueueError(AppError):
+    status = 500
