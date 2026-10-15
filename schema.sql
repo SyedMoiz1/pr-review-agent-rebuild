@@ -6,5 +6,5 @@ CREATE TABLE webhook_events (
     repo TEXT,
     pr_number INTEGER,
     payload JSONB NOT NULL,
-    received_at TIMESTAMPTZ NOT NULL DEFAULT now() 
+    received_at TIMESTAMPTZ NOT NULL DEFAULT no() 
 );
