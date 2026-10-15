@@ -13,7 +13,7 @@ services:
       - postgres_data:/var/lib/postgresql
   redis:
     image: redis:7-alpine
-    container_name: redis
+    container_name: redi
     ports:
       - "6379:6379"
     volumes:
