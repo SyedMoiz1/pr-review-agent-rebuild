@@ -1,0 +1,8 @@
+.env
+.git
+Drills/
+tests/
+**/*_cache
+**/*.pyc
+**/__pycache__/
+.venv/

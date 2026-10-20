@@ -2,7 +2,6 @@
 name = "pr-review-agent-rebuild"
 version = "0.1.0"
 description = "Add your description here"
-readme = "README.md"
 authors = [
     { name = "Syed Moiz", email = "syedmoiz619@gmail.com" }
 ]
@@ -16,7 +15,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "uvicorn>=0.53.0",
     "alembic>=1.20.0",
-    "psycopg>=3.3.6",
+    "psycopg[binary]>=3.3.6",
     "arq>=0.28.0",
 ]
 

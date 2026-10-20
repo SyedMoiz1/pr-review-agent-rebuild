@@ -11,6 +11,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U $${POSTGRES_USER}"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+      start_interval: 5s
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -20,7 +27,53 @@ services:
       - redis-data:/data
     command: redis-server --appendonly yes
     restart: unless-stopped
-
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+      start_interval: 5s
+  migrate:
+    build: .
+    image: pr-review-agent-app
+    command: alembic upgrade head
+    depends_on: 
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  app:
+    build: .
+    image: pr-review-agent-app
+    ports:
+      - "8080:8080"
+    depends_on: 
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate: 
+        condition: service_completed_successfully
+    environment:
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  worker:
+    build: .
+    image: pr-review-agent-app
+    command: arq pr_review_agent_rebuild.worker.WorkerSettings
+    depends_on: 
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate: 
+        condition: service_completed_successfully
+    environment: 
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
 volumes:
   redis-data:
     driver: local
