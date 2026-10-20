@@ -31,7 +31,7 @@ class DiffFile(BaseModel):
     patch: str | None
 
 #need a github client class
-#This class will have 2 functions: 
+#This class will have 2 functions:
 #get_pull_request(client, owner, repo, number) -> PullRequestMeta
 #list_pull_request_files(client, owner, repo, number) -> list[DiffFile]
     #Paginated. Set per_page=100. Follow the Link header until there is no rel="next".
@@ -60,7 +60,8 @@ class GithubClient:
             raise GithubRetryError(reason = "429 Too Many Requests. Retry recommended.")
         elif 500 <= status < 600:
             raise GithubRetryError(reason = "Internal Server Error. Retry recommended.")
-        else: raise GithubPermError(reason="Unrecognized Error")
+        else:
+            raise GithubPermError(reason="Unrecognized Error")
 
     async def get_pull_request(self, client: AsyncClient, owner: str, repo: str, number: int) -> PullRequestMeta:
         async with asyncio.timeout(30): #total deadline for task
@@ -70,7 +71,7 @@ class GithubClient:
                         response = await client.get(url=self.base_url+f"/repos/{owner}/{repo}/pulls/{number}", headers=self.headers)
                 except (httpx.TimeoutException, httpx.ConnectError): #exception is handled inside
                     self.app_error_handler(status=408)
-                
+
                 status = response.status_code
                 if 400 <= status < 600:
                     self.app_error_handler(status=status, headers=response.headers)
@@ -111,7 +112,7 @@ class GithubClient:
                         page += 1
                         continue
                     break
-                
+
                 return (diffs, incomplete)
             except JSONDecodeError as e:
                 raise MalformedPayload(reason = "Invalid Data Fields.") from e

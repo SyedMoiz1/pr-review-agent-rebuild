@@ -52,20 +52,20 @@ async def fetch_diff(ctx: dict[str, Any], delivery_id: str, request_id: str) -> 
         pr_metadata: PullRequestMeta = await ctx["ghclient"].get_pull_request(client = ctx["http_client"], owner=owner, repo = repo, number = pr_number)
     except GithubRetryError as e:
         if e.retry_after:
-            logger.warning(json.dumps({"request_id": request_id ,"message": f"Retry #{ctx['job_try']} pr metadata pull with Retry_after: {e.retry_after}."})) 
+            logger.warning(json.dumps({"request_id": request_id ,"message": f"Retry #{ctx['job_try']} pr metadata pull with Retry_after: {e.retry_after}."}))
             raise Retry(defer=e.retry_after) from e
         defer=compute_delay(ctx["job_try"])
-        logger.warning(json.dumps({"request_id": request_id ,"message": f"Retry #{ctx['job_try']} pr metadata pull with computed delay: {defer}."})) 
+        logger.warning(json.dumps({"request_id": request_id ,"message": f"Retry #{ctx['job_try']} pr metadata pull with computed delay: {defer}."}))
         raise Retry(defer) from e
     except GithubPermError as e:
-        logger.error(json.dumps({"request_id": request_id ,"message": f"Non-retryable error for pr metadata pull: {e}."})) 
+        logger.error(json.dumps({"request_id": request_id ,"message": f"Non-retryable error for pr metadata pull: {e}."}))
         return
     logger.info(json.dumps({"request_id": request_id ,"message": f"PR Metadata received for repo: {repo}, pr: {pr_number}."}))
 
     head = pr_metadata.head.sha
     base = pr_metadata.base.sha
 
-    #idempotency check 
+    #idempotency check
     query2 = """SELECT 1 FROM diffs WHERE
     repo = $1
     AND pr_number = $2
@@ -82,13 +82,13 @@ async def fetch_diff(ctx: dict[str, Any], delivery_id: str, request_id: str) -> 
         pr_files_tuple: tuple[list[DiffFile], bool] = await ctx["ghclient"].list_pull_request_files(client = ctx["http_client"], owner=owner, repo = repo, number = pr_number)
     except GithubRetryError as e:
         if e.retry_after:
-            logger.warning(json.dumps({"request_id": request_id ,"message": f"Retry #{ctx['job_try']} pr file pull with Retry_after: {e.retry_after}."})) 
+            logger.warning(json.dumps({"request_id": request_id ,"message": f"Retry #{ctx['job_try']} pr file pull with Retry_after: {e.retry_after}."}))
             raise Retry(defer=e.retry_after) from e
         defer=compute_delay(ctx["job_try"])
-        logger.warning(json.dumps({"request_id": request_id ,"message": f"Retry #{ctx['job_try']} pr file pull with computed delay: {defer}."})) 
+        logger.warning(json.dumps({"request_id": request_id ,"message": f"Retry #{ctx['job_try']} pr file pull with computed delay: {defer}."}))
         raise Retry(defer) from e
     except GithubPermError as e:
-        logger.error(json.dumps({"request_id": request_id ,"message": f"Non-retryable error for pr file pull: {e}."})) 
+        logger.error(json.dumps({"request_id": request_id ,"message": f"Non-retryable error for pr file pull: {e}."}))
         return
     pr_files = pr_files_tuple[0]
     incomplete_flag = pr_files_tuple[1]
@@ -98,7 +98,7 @@ async def fetch_diff(ctx: dict[str, Any], delivery_id: str, request_id: str) -> 
 
     #inserts happen after both github calls so no half-written diff is possible
     await insert_diff(pool=ctx["pool"], request_id=request_id, event_id=event_id, repo=psql_response_events["repo"], pr_number=pr_number, base_sha=base, head_sha=head, pr_files=pr_files )
-    
+
 
 async def insert_diff(pool: asyncpg.Pool, request_id: str, event_id: int, repo: str, pr_number: int, base_sha: str, head_sha: str, pr_files: list[DiffFile]) -> None:
     diffs_query = "INSERT INTO diffs (event_id, repo, pr_number, base_sha, head_sha) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (repo, pr_number, head_sha, base_sha) DO NOTHING RETURNING id;"

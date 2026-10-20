@@ -7,10 +7,8 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "ruff>=0.16.3",
     "fastapi",
     "python-dotenv>=1.2.3",
-    "requests>=2.34.2",
     "httpx>=0.28.1",
     "asyncpg>=0.31.0",
     "uvicorn>=0.53.0",
@@ -18,9 +16,6 @@ dependencies = [
     "psycopg[binary]>=3.3.6",
     "arq>=0.28.0",
 ]
-
-[project.scripts]
-pr-review-agent-rebuild = "pr_review_agent_rebuild:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
@@ -43,3 +38,7 @@ files = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

@@ -1,7 +1,7 @@
 """create webhook events
 
 Revision ID: 98d703a06dda
-Revises: 
+Revises:
 Create Date: 2026-10-05 19:04:08.296279
 
 """
@@ -27,11 +27,11 @@ def upgrade() -> None:
         repo TEXT,
         pr_number INTEGER,
         payload JSONB NOT NULL,
-        received_at TIMESTAMPTZ NOT NULL DEFAULT now() 
+        received_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
     """)
 
 def downgrade() -> None:
     """Downgrade schema."""
     op.execute("DROP TABLE webhook_events")
-    
+

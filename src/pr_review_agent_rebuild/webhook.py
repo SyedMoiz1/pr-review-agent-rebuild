@@ -65,7 +65,7 @@ class Sender(BaseModel):
     login: str
     id: int
 
-class WebhookPayload(BaseModel): 
+class WebhookPayload(BaseModel):
     action: str
     number: int
     pull_request: PullRequest
@@ -98,7 +98,7 @@ def find_field_errors(errors: list[ErrorDetails]) -> list[str]:
 #Connection Pool for postgresql
 #Lifespan is when the event loop starts running, since create_pool is async, its created here
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]: 
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.postgres_pool = await asyncpg.create_pool(dsn=os.environ["DATABASE_URL"], command_timeout = 10)
     app.state.redis_pool = await arq.create_pool(REDIS_SETTINGS)
     try:
@@ -112,10 +112,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 #create app
 app = FastAPI(lifespan=lifespan)
 
-def get_postgres_pool(request: Request) -> asyncpg.Pool: 
+def get_postgres_pool(request: Request) -> asyncpg.Pool:
     pool: asyncpg.Pool = request.app.state.postgres_pool #using request.app rather just app which allows dependency overrides
     return pool
-def get_redis_pool(request: Request) -> arq.ArqRedis: 
+def get_redis_pool(request: Request) -> arq.ArqRedis:
     pool: arq.ArqRedis = request.app.state.redis_pool #using request.app rather just app which allows dependency overrides
     return pool
 
@@ -137,7 +137,7 @@ async def add_request_id(request: Request, call_next: RequestResponseEndpoint) -
     finally:
         total_time = time.perf_counter() - before_time
         if response is None:
-            logger.error(json.dumps({"request_id": f"{request_uuid}", "method": f"{request.method}", "path": f"{request.url.path}", "status": 500, "duration_s": total_time})) 
+            logger.error(json.dumps({"request_id": f"{request_uuid}", "method": f"{request.method}", "path": f"{request.url.path}", "status": 500, "duration_s": total_time}))
         else:
             message = json.dumps({"request_id": f"{request_uuid}", "method": f"{request.method}", "path": f"{request.url.path}", "status": response.status_code, "duration_s": total_time})
             if 399 >= response.status_code >= 200:
@@ -164,41 +164,41 @@ async def create_item(
     event_type = request.headers.get("X-GitHub-Event")
     request_id = request_id_var.get()
     if not signature:
-        logger.warning(json.dumps({"request_id": f"{request_id}", "path": f"{request.url.path}", "message": "Request failed due to a missing HMAC."})) 
+        logger.warning(json.dumps({"request_id": f"{request_id}", "path": f"{request.url.path}", "message": "Request failed due to a missing HMAC."}))
         raise InvalidSignature(reason = "Authentication Error")
     valid_hmac = validate_hmac(signature, raw_body, secret=secret)
-    
+
     if not valid_hmac:#verify signature
-        logger.warning(json.dumps({"request_id": f"{request_id}", "message": "Request failed due to an Invalid Signature"})) 
+        logger.warning(json.dumps({"request_id": f"{request_id}", "message": "Request failed due to an Invalid Signature"}))
         raise InvalidSignature(reason = "Authentication Error")
     if not delivery_id:#check if deliv id exists
-        logger.warning(json.dumps({"request_id": f"{request_id}", "path": f"{request.url.path}", "message": "Request failed due to a missing X-GitHub-Delivery header."})) 
+        logger.warning(json.dumps({"request_id": f"{request_id}", "path": f"{request.url.path}", "message": "Request failed due to a missing X-GitHub-Delivery header."}))
         raise MalformedPayload(reason = "Missing X-GitHub-Delivery header.")
     if not event_type:#check if event type exists
-        logger.warning(json.dumps({"request_id": f"{request_id}", "path": f"{request.url.path}", "message": "Request failed due to a missing X-GitHub-Event header."})) 
+        logger.warning(json.dumps({"request_id": f"{request_id}", "path": f"{request.url.path}", "message": "Request failed due to a missing X-GitHub-Event header."}))
         raise MalformedPayload(reason = "Missing X-GitHub-Event header.")
     elif event_type not in ["pull_request", "ping"]:#ignore unhandled event types
-        logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Unhandled event type received ({event_type})."})) 
+        logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Unhandled event type received ({event_type})."}))
         return JSONResponse(
-            status_code=200, 
+            status_code=200,
             content={"message": "Event not handled."}
         )
     elif event_type == "ping":
-        logger.info(json.dumps({"request_id": f"{request_id}", "message": "Ping received from github."})) 
+        logger.info(json.dumps({"request_id": f"{request_id}", "message": "Ping received from github."}))
         return JSONResponse(
             status_code=200,
             content={"message": "Ping acknowledged."}
         )
-    
+
     try:
         data = json.loads(raw_body)
         payload = WebhookPayload(**data)
-        logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Webhook number {payload.pull_request.id} for Pull Request {payload.number} successfully verified"})) 
+        logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Webhook number {payload.pull_request.id} for Pull Request {payload.number} successfully verified"}))
     #--------------------------POSTGRES INSERT--------------------------
         try:
             psql_response = await postgres_pool.execute(
-                """INSERT INTO webhook_events 
-                (delivery_id, event_type, action, repo, pr_number, payload) 
+                """INSERT INTO webhook_events
+                (delivery_id, event_type, action, repo, pr_number, payload)
                 VALUES ($1, $2, $3, $4, $5, $6::jsonb)
                 ON CONFLICT (delivery_id) DO NOTHING""",
                 delivery_id,
@@ -209,17 +209,17 @@ async def create_item(
                 json.dumps(data)
             )
             if psql_response == "INSERT 0 1":
-                logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Row successfully inserted for delivery id {delivery_id}"})) 
+                logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Row successfully inserted for delivery id {delivery_id}"}))
             elif psql_response == "INSERT 0 0":
-                logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Row not inserted for webhook number {payload.number} due do a duplicate delivery."})) 
+                logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Row not inserted for webhook number {payload.number} due do a duplicate delivery."}))
         except TimeoutError as e:
-            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Database insert timed out"})) 
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Database insert timed out"}))
             raise StorageError(reason= "Database insert timed out") from e
         except OSError as e:
-            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Could not reach database"})) 
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Could not reach database"}))
             raise StorageError(reason= "Could not reach database") from e
         except asyncpg.PostgresError as e:
-            logger.error(json.dumps({"request_id": f"{request_id}", "message": f"Postgres error: {e}"})) 
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": f"Postgres error: {e}"}))
             raise StorageError(reason= "Postgres error") from e
     #--------------------Postgres Insert------------------------------------
 
@@ -227,16 +227,16 @@ async def create_item(
         try:
             await redis_pool.enqueue_job('fetch_diff', delivery_id, request_id , _job_id=delivery_id)
         except (OSError, redis.exceptions.ConnectionError) as e:
-            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Could not reach redis"})) 
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Could not reach redis"}))
             raise QueueError(reason= "Could not reach redis") from e
         except (TimeoutError, redis.exceptions.TimeoutError) as e:
-            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Redis Enque timed out"})) 
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": "Redis Enque timed out"}))
             raise QueueError(reason= "Redis Enque timed out") from e
         except redis.exceptions.RedisError as e:
-            logger.error(json.dumps({"request_id": f"{request_id}", "message": f"Redis error: {e}"})) 
-            raise QueueError(reason= "Redis error") from e 
+            logger.error(json.dumps({"request_id": f"{request_id}", "message": f"Redis error: {e}"}))
+            raise QueueError(reason= "Redis error") from e
     #--------------------REDIS ENQUE---------------------------------------
-        
+
         return JSONResponse(
             status_code=200,
             content={"message": "Pull Request received and validated successfully."}
@@ -254,7 +254,7 @@ async def list_events(
     repo: str | None = None,
     event_type: str | None = None,
     pool:asyncpg.Pool=Depends(get_postgres_pool) # noqa: B008
-) -> EventResponse: 
+) -> EventResponse:
     try:
         query = "SELECT id, action, repo, event_type, received_at FROM webhook_events"
         conditions = []
@@ -276,7 +276,7 @@ async def list_events(
             except (IndexError, ValueError, UnicodeDecodeError) as e: #Index error can be caught from cursor not having '|'
                 logger.warning(json.dumps({"message": f"Could not decode cursor id due to {e}."}))
                 raise MalformedPayload(reason = "Invalid Cursor Field.") from e
-            
+
             #verify filters hash matches to the actual filters provided
             if param_filters_hash != filters_hash:
                 logger.warning(json.dumps({"message": "Filter provided does not match the filters provided with the cursor."}))
@@ -286,7 +286,7 @@ async def list_events(
 
         if conditions != []:
             query += " WHERE " + " AND ".join(conditions)
-        
+
         params.append(limit+1)
         query += f" ORDER BY id DESC LIMIT ${len(params)}"#fetch limit + 1 rows to see if next page is needed
         psql_response = await pool.fetch(query, *params)
@@ -296,18 +296,18 @@ async def list_events(
             typed_events.append(WebhookEvent(id = row["id"], action=row["action"], repo=row["repo"], event_type=row['event_type'], received_at=row['received_at']))
         if len(psql_response) <= limit: #less items available than limit
             cursor = None
-        else: 
+        else:
             cursor = encode_cursor(psql_response[-2]["id"], param_filters_hash)
             typed_events.pop()
         return EventResponse(events=typed_events, next_cursor = cursor)
     except TimeoutError as e:
-        logger.error(json.dumps({"message": "Database read timed out"})) 
+        logger.error(json.dumps({"message": "Database read timed out"}))
         raise StorageError(reason= "Database read timed out") from e
     except OSError as e:
-        logger.error(json.dumps({"message": "Could not reach database"})) 
+        logger.error(json.dumps({"message": "Could not reach database"}))
         raise StorageError(reason= "Could not reach database") from e
     except asyncpg.PostgresError as e:
-        logger.error(json.dumps({"message": f"Postgres error: {e}"})) 
+        logger.error(json.dumps({"message": f"Postgres error: {e}"}))
         raise StorageError(reason= "Postgres error") from e
 
 def decode_cursor(cursor: str) -> tuple[int, str]:

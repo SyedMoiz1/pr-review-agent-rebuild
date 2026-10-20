@@ -7,10 +7,10 @@
 # Every error response has the same JSON shape. Same keys, every time, whatever went wrong.
 # A client shouldn't have to parse three different error formats.
 
-# Put the request ID in the error body. 
+# Put the request ID in the error body.
 # That's what makes "my request failed" actionable — they quote the ID, you grep for it.
 
-# Your handler raises domain errors. It never mentions HTTP status codes. 
+# Your handler raises domain errors. It never mentions HTTP status codes.
 # The handler is the only place that knows about HTTP.
 
 
@@ -24,7 +24,7 @@ class InvalidSignature(AppError):
 
 class UnknownSender(AppError):
     status = 400
-    
+
 class MalformedPayload(AppError):
     status = 422
 

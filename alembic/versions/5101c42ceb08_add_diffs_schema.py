@@ -18,13 +18,13 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    #JSON List -> One per file in diff-> includes filename, status, line counts, patch 
+    #JSON List -> One per file in diff-> includes filename, status, line counts, patch
     #JSON List is Paginated -> Each page holds a set number of files. Default is 30
     #idempotency key -> repo + PR Number + head SHA + base SHA
 
     #Two tables:
     #1) diffs: one row per version of the PR. Holds repo, pr number, head sha, base sha. unique id = repo + PR Number + head SHA + base SHA
-    #2) diff_files one row per file, with a foreign key to diffs. Holds filename, status, additions, deletions, patch. 
+    #2) diff_files one row per file, with a foreign key to diffs. Holds filename, status, additions, deletions, patch.
     #Tradeoff -> patch may sometimes be NULL, this is for very large files. in the pr comment, mention this
     op.execute("""
         CREATE TABLE diffs (
@@ -49,7 +49,7 @@ def upgrade() -> None:
             UNIQUE (diffref_id, filename)
         );
     """)
-    
+
 
 
 def downgrade() -> None:
@@ -59,4 +59,4 @@ def downgrade() -> None:
                DROP TABLE diffs;
                """)
 
-    
+
