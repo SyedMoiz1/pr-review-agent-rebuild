@@ -33,3 +33,10 @@ class StorageError(AppError):
 
 class QueueError(AppError):
     status = 500
+
+class GithubRetryError(AppError):
+    def __init__(self, reason: str, retry_after: float | None = None) -> None:
+        super().__init__(reason)
+        self.retry_after = retry_after
+class GithubPermError(AppError):
+    pass

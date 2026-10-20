@@ -1,8 +1,3 @@
-# Webhook endpoint with HMAC verification — the main thing left. A FastAPI route (POST /webhook) that:
-# Reads the X-Hub-Signature-256 header GitHub sends
-# Recomputes the HMAC using your secret key and the raw request body
-# Uses hmac.compare_digest to compare (timing-safe)
-# Returns 200 if valid, 401 if not
 import base64
 import hashlib
 import hmac
@@ -87,6 +82,7 @@ class WebhookEvent(BaseModel):
 class EventResponse(BaseModel):
     events: list[WebhookEvent]
     next_cursor: str | None
+
 
 def validate_hmac(hmac_str: str, payload: bytes, secret: str) -> bool:
     actual = 'sha256=' + hmac.new(secret.encode(), payload, digestmod=hashlib.sha256).hexdigest()
@@ -197,7 +193,7 @@ async def create_item(
     try:
         data = json.loads(raw_body)
         payload = WebhookPayload(**data)
-        logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Webhook number {payload.number} for Pull Request {payload.pull_request.id} successfully verified"})) 
+        logger.info(json.dumps({"request_id": f"{request_id}", "message": f"Webhook number {payload.pull_request.id} for Pull Request {payload.number} successfully verified"})) 
     #--------------------------POSTGRES INSERT--------------------------
         try:
             psql_response = await postgres_pool.execute(
@@ -209,7 +205,7 @@ async def create_item(
                 event_type,
                 payload.action,
                 payload.repository.full_name,
-                payload.pull_request.number,
+                payload.number,
                 json.dumps(data)
             )
             if psql_response == "INSERT 0 1":
@@ -313,7 +309,7 @@ async def list_events(
     except asyncpg.PostgresError as e:
         logger.error(json.dumps({"message": f"Postgres error: {e}"})) 
         raise StorageError(reason= "Postgres error") from e
-    
+
 def decode_cursor(cursor: str) -> tuple[int, str]:
     decoded_string = base64.urlsafe_b64decode(cursor.encode()).decode()#str -> bytes -> decoded bytes -> string
     cursor_id = int(decoded_string.split("|")[0])
@@ -325,4 +321,5 @@ def encode_cursor(data: int, filters_hash: str) -> str:
 def normalize_and_hash(filters: dict[str, str]) -> str:
     normalized = json.dumps(filters, sort_keys=True)
     return hashlib.sha256(normalized.encode()).hexdigest()
+
 
