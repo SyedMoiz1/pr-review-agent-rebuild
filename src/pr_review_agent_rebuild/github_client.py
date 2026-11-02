@@ -39,9 +39,9 @@ class DiffFile(BaseModel):
 
 class GithubClient:
     def __init__(self) -> None:
+        gh_token = os.environ["GITHUB_TOKEN"]
         self.headers ={"Authorization": f"Bearer {gh_token}","Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
         self.base_url = 'https://api.github.com'
-        gh_token = os.environ["GITHUB_TOKEN"]
 
     def app_error_handler(self, status: int, headers: Headers | None = None) -> NoReturn:
         if status == 404:
