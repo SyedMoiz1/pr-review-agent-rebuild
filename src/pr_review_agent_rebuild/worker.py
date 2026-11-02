@@ -14,7 +14,6 @@ from .exceptions import GithubPermError, GithubRetryError
 from .github_client import DiffFile, GithubClient, PullRequestMeta
 
 load_dotenv()
-REDIS_SETTINGS = RedisSettings.from_dsn(os.environ["REDIS_URL"])
 #configure logger
 logging.basicConfig(level=logging.INFO, format='%(asctime)s  - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -118,7 +117,7 @@ async def insert_diff(pool: asyncpg.Pool, request_id: str, event_id: int, repo: 
 
 class WorkerSettings:
     functions = (fetch_diff,)
-    redis_settings = REDIS_SETTINGS
+    redis_settings = RedisSettings.from_dsn(os.environ["REDIS_URL"])
     on_startup = startup
     on_shutdown = shutdown
     max_tries = 5
