@@ -1,4 +1,4 @@
-FROM python:3.11-slim AS build
+FROM python:3.12-slim AS build
 WORKDIR /app 
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -21,7 +21,7 @@ RUN uv sync --locked --no-dev
 
 
 
-FROM python:3.11-slim AS run
+FROM python:3.12-slim AS run
 WORKDIR /app 
 
 ENV PATH="/app/.venv/bin:$PATH"
