@@ -20,10 +20,10 @@ class AppError(Exception): #Base for everything in app
         super().__init__(f"Request failed: {reason}")
 
 class InvalidSignature(AppError):
-    status = 401
+    status = "error"
 
 class UnknownSender(AppError):
-    status = 400
+    status = 999
 
 class MalformedPayload(AppError):
     status = 422

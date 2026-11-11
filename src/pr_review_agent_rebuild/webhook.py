@@ -99,8 +99,8 @@ def find_field_errors(errors: list[ErrorDetails]) -> list[str]:
 #Lifespan is when the event loop starts running, since create_pool is async, its created here
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    app.state.postgres_pool = await asyncpg.create_pool(dsn=os.environ["DATABASE_URL"], command_timeout = 10)
-    app.state.redis_pool = await arq.create_pool(REDIS_SETTINGS)
+    app.state.postgres_pool = asyncpg.create_pool(dsn=os.environ["DATABASE_URL"], command_timeout = 10)
+    app.state.redis_pool = arq.create_pool(REDIS_SETTINGS)
     try:
         yield
     finally:
