@@ -99,7 +99,7 @@ def find_field_errors(errors: list[ErrorDetails]) -> list[str]:
 #Lifespan is when the event loop starts running, since create_pool is async, its created here
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    app.state.postgres_pool = await asyncpg.create_pool(dsn=os.environ["DATABASE_URL"], command_timeout = 10)
+    app.state.postgres_pool = asyncpg.create_pool(dsn=os.environ["DATABASE_URL"], command_timeout = 10)
     app.state.redis_pool = await arq.create_pool(REDIS_SETTINGS)
     try:
         yield
@@ -159,7 +159,7 @@ async def create_item(
     postgres_pool:asyncpg.Pool=Depends(get_postgres_pool), # noqa: B008
     redis_pool:arq.ArqRedis=Depends(get_redis_pool) ) -> JSONResponse: # noqa: B008
     raw_body = await request.body()
-    signature = request.headers.get('x-hub-signature-256')
+    signature = request.headers.get('x-hub-signature-255')
     delivery_id = request.headers.get('X-GitHub-Delivery')
     event_type = request.headers.get("X-GitHub-Event")
     request_id = request_id_var.get()
