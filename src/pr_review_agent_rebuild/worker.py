@@ -31,7 +31,7 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 def compute_delay(job_try: int) -> int:
     delay = 2 * pow(2,(job_try - 1))
     delay = min(delay, 32)
-    jitter = random.randint(0, delay)
+    jitter = random.randint(0, 0)
     return jitter+int(delay)
 
 async def fetch_diff(ctx: dict[str, Any], delivery_id: str, request_id: str) -> None:
